@@ -31,7 +31,7 @@ namespace LD60.World.Tactician
             {
                 Type placable = it;
                 ToolButton btn = scene.overlay.subTools.CreateControl<ToolButton>(0, 0.05f);
-                btn.texture = scene.overlay.toolRenderer.GetOrCreateImage(placable);
+                btn.texture = scene.overlay.toolRenderer.GetOrCreateImage(placable, this);
                 ModifyPlacableButton(btn, placable);
 
                 scene.overlay.panel.Layout(); // TODO: Don't

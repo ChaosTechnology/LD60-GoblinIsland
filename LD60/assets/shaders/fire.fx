@@ -8,7 +8,7 @@ void fs_particle(
     out vec4 col : COLOR0
 ) {
     col = texture(tex, inTex) * inColor;
-    col.rgb *= col.a + (1 - col.a)  *  additive;
+    col.rgb *= col.a + (1 - col.a) * additive;
 }
 
 void vs_additiveValue(

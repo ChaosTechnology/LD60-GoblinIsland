@@ -5,6 +5,7 @@ namespace LD60
         StoreFrameBuffer,
         ResetInstancers,
         FillInstancers,
+        Background,
         BeginWorld,
         World,
         BeginPicking,
@@ -13,13 +14,14 @@ namespace LD60
         WorldAfterPicking,
         BeginMaterial,
         Material,
-        Sky,
         RenderDeferredShader,
-        Transparents,
+        BindIntermediateFramebuffer,
+        Sky,
         AntiAliasing,
-        ResetFramebuffer,
+        Transparents,
         Postprocessing,
         HUD,
+        Present,
     }
 
     public enum UpdateLayers

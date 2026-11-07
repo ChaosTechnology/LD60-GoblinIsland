@@ -24,9 +24,6 @@ namespace LD60.World
         public readonly InstancingManagerContainer<InstancingHost> instancers;
         public readonly ChaosFramework.Graphics.OpenGl.PostProcessors.AntiAliasing antiAliasing = new();
 
-        readonly Framebuffer postprocessingFBO;
-        public Texture postprocessingTexture => postprocessingFBO.textures[0];
-
         Scene InstancingHost.scene => this;
 
         public DeferredRenderingScene(Game game, int width, int height)
@@ -58,19 +55,6 @@ namespace LD60.World
 
             instancers = new InstancingManagerContainer<InstancingHost>(this, game.graphics);
             instancers.CreateInstancers(typeof(DeferredRenderingScene).Assembly);
-
-            postprocessingFBO = new Framebuffer(deferredShader.width, deferredShader.height, [
-                new Texture(
-                    game.graphics.dispatcher,
-                    new Texture.Parameters(
-                       deferredShader.width,
-                       deferredShader.height,
-                       pixelType: PixelType.Float,
-                       pixelFormat: PixelFormat.Rgba,
-                       internalFormat: PixelInternalFormat.Rgba32f
-                       )
-                    )
-            ]);
         }
 
 #if DEBUG
@@ -83,13 +67,14 @@ namespace LD60.World
         }
 #endif
 
-        Framebuffer oldFb;
+        public Framebuffer sceneTargetFb { get; private set; }
         public override void SetDrawCalls()
         {
             base.SetDrawCalls();
 
             drawLayers[(int)DrawLayers.StoreFrameBuffer].Add(StoreFramebuffer);
-            drawLayers[(int)DrawLayers.ResetFramebuffer].Insert(0, ResetFramebuffer);
+            drawLayers[(int)DrawLayers.BindIntermediateFramebuffer].Add(BindIntermediateFramebuffer);
+            drawLayers[(int)DrawLayers.Present].Add(Present);
 
             drawLayers[(int)DrawLayers.BeginWorld].Add(BeginWorld);
             drawLayers[(int)DrawLayers.BeginWorldAfterPicking].Add(BeginWorldAfterPicking);
@@ -114,27 +99,51 @@ namespace LD60.World
 #endif
 
         void StoreFramebuffer()
-            => oldFb = game.graphics.stateTracker.GetFramebuffer(FramebufferTarget.Framebuffer);
+        {
+            Framebuffer intermediateFbo = GetIntermediateFbo();
+            if (intermediateFbo == null)
+                sceneTargetFb = game.graphics.stateTracker.GetFramebuffer(FramebufferTarget.Framebuffer);
+            else
+                BindIntermediateFramebuffer();
+        }
 
-        void ResetFramebuffer()
-            => game.graphics.stateTracker.BindFramebuffer(FramebufferTarget.Framebuffer, oldFb);
+        void BindIntermediateFramebuffer()
+            => game.graphics.stateTracker.BindFramebuffer(FramebufferTarget.Framebuffer, GetIntermediateFbo() ?? sceneTargetFb);
+
+        void Present()
+        {
+            Framebuffer intermediateFbo = GetIntermediateFbo();
+            if (intermediateFbo != null)
+            {
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, intermediateFbo.frameBufferName);
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, sceneTargetFb?.frameBufferName ?? 0);
+                GL.BlitFramebuffer(
+                    0, 0, deferredShader.width, deferredShader.height,
+                    0, 0, deferredShader.width, deferredShader.height,
+                    ClearBufferMask.ColorBufferBit,
+                    BlitFramebufferFilter.Nearest
+                    );
+                Graphics.ThrowErrors();
+
+                GL.BindFramebuffer(FramebufferTarget.Framebuffer, sceneTargetFb?.frameBufferName ?? 0);
+                Graphics.ThrowErrors();
+            }
+        }
+
+        protected virtual Framebuffer GetIntermediateFbo()
+            => null;
 
         protected virtual void RenderDeferred()
             => deferredShader.Render();
 
         void BeginWorld()
-        {
-            deferredShader.BeginWorld();
-            GL.ClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-            GL.Clear(ClearBufferMask.ColorBufferBit);
-        }
+            => deferredShader.BeginWorld();
 
         void BeginWorldAfterPicking()
             => game.graphics.stateTracker.BindFramebuffer(FramebufferTarget.Framebuffer, deferredShader.worldFramebuffer);
 
         void ApplyAntiAliasing()
         {
-            game.graphics.stateTracker.BindFramebuffer(FramebufferTarget.Framebuffer, oldFb);
             antiAliasing.Apply(deferredShader);
         }
 

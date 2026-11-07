@@ -7,6 +7,7 @@ using ChaosFramework.Graphics.Imaging.Formats;
 using ChaosFramework.Graphics.OpenGl;
 using ChaosFramework.Graphics.OpenGl.Text;
 using ChaosFramework.Math;
+using OpenTK.Graphics.OpenGL;
 using static ChaosFramework.Math.Clamping;
 
 namespace LD60.World
@@ -26,6 +27,9 @@ namespace LD60.World
 
         protected bool takeScreenshot = false;
 
+        readonly Framebuffer intermediateFbo;
+        public Texture postprocessingTexture => intermediateFbo.textures[0];
+
         public WorldScene(Game game, int width, int height)
             : base(game, width, height)
         {
@@ -43,6 +47,20 @@ namespace LD60.World
             transparency.transparents.Add(fire = AddComponent<Transparents.ParticleFire>());
 
             CreatePhysics();
+
+            intermediateFbo = new Framebuffer(deferredShader.width, deferredShader.height, [
+                new Texture(
+                    game.graphics.dispatcher,
+                    new Texture.Parameters(
+                       deferredShader.width,
+                       deferredShader.height,
+                       pixelType: PixelType.Float,
+                       pixelFormat: PixelFormat.Rgba,
+                       internalFormat: PixelInternalFormat.Rgba32f
+                       )
+                    )
+                ],
+                deferredShader.depthBuffer);
         }
 
         public void CreatePhysics()
@@ -59,6 +77,9 @@ namespace LD60.World
             if (takeScreenshot)
                 TakeScreenshot();
         }
+
+        protected override Framebuffer GetIntermediateFbo()
+            => intermediateFbo;
 
         void TakeScreenshot()
         {
@@ -90,13 +111,13 @@ namespace LD60.World
 
         public override void SetDrawCalls()
         {
-            foreach (var textList in textLists)
+            foreach (Tuple<DrawLayers, string, LinkedList<Text>> textList in textLists)
                 textList.Item3.Clear();
 
             base.SetDrawCalls();
-            drawLayers[(int)DrawLayers.Transparents].Add(() => transparency.Render(deferredShader));
+            drawLayers[(int)DrawLayers.Transparents].Add(() => transparency.Render(deferredShader, intermediateFbo));
 
-            foreach (var textList in textLists)
+            foreach (Tuple<DrawLayers, string, LinkedList<Text>> textList in textLists)
                 drawLayers[(int)textList.Item1].Add(() =>
                 {
                     view.SetValues(game.graphics.shaders.managedText, Matrix.IDENTITY);
